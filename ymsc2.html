@@ -10,6 +10,10 @@
             text-align: center;
             margin-top: 20%;
         }
+        video {
+            margin-top: 10px; /* Adds space between GIF and video */
+            max-width: 70%; /* Ensures the video fits within the page */
+        }
     </style>
 </head>
 <body>
@@ -19,7 +23,7 @@
         <!-- 영어 이름으로 파일명 변경 -->
         <img src="seunghyun.jpg" alt="환영 이미지" width="300">
          <!-- Insert MP4 video below the GIF -->
-        <video controls>
+        <video autoplay muted loop>
             <source src="seunghyun.mp4" type="video/mp4">
             Your browser does not support the video tag.
         </video>
