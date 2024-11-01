@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR 코드 스캔 후 리디렉션</title>
+    <style>
+        /* 간단한 스타일링 */
+        .message {
+            font-size: 1.5rem;
+            text-align: center;
+            margin-top: 20%;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="message">
+        <p>환영합니다! '박승현' 투표 부탁드립니다.</p>
+        <!-- 이미지도 추가 가능 -->
+        <img src="your-image-url.jpg" alt="Welcome Image" width="300">
+    </div>
+
+    <script>
+        // 3초 후에 URL로 리디렉션
+        setTimeout(function() {
+            window.location.href = "https://your-target-url.com";
+        }, 3000);
+    </script>
+
+</body>
+</html>
