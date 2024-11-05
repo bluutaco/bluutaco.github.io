@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR 코드 스캔 후 리디렉션</title>
+    <style>
+        .message {
+            font-size: 1.4rem;
+            text-align: center;
+            margin-top: 5%;
+        }
+    </style>
+    </style>
+</head>
+<body>
+
+    <div class="message">
+        <p>감사합니다🙂<br>'박승현(연세/4학년)' 입니다.<br> 연세대학교 의과대학 의학과 4학년 박승현<br> Tel: (+82)10-4312-1299 <br> e-mail: seunghyun.park19@med.yuhs.ac </p>
+       </div>
+
+    <div class="message">
+        <!-- Insert photo between the two messages -->
+        <img src="seunghyun.jpg" alt="환영 이미지" width="300">
+    </div>
+
+    <div class="message">
+        <p>3초 후에 PDF 문서가 표시됩니다...</p>
+    </div>
+
+
+    <script>
+        // 3초 후에 URL로 리디렉션
+        setTimeout(function() {
+            window.location.href = "https://drive.google.com/file/d/16U7R_vPSd7MhkhoJuoHwZ5MF8XSIwtni/view?usp=drive_link";
+        }, 3000);
+    </script>
+
+</body>
+</html>
