@@ -1,0 +1,192 @@
+########################
+setup.py와 main.py로 구성되어 있습니다.
+DeSIDE-DDI는 아래 링크에서 가져오시면 됩니다.
+The source code is available on GitHub (https://github.com/ GIST-CSBL/DeSIDE-DDI)
+FROM DeSIDE-DDI: interpretable prediction of drug-drug interactions using drug-induced gene expressions, Eunyoung Kim and Hojung Nam*
+####### setup.py #######
+
+import os
+import sys
+import warnings
+import tensorflow as tf
+import pandas as pd
+
+# 경로 설정
+os.chdir(os.path.expanduser("~/colab_DDI/DeSIDE-DDI/ddi_model"))
+sys.path.append(os.getcwd())
+
+# 경고 메시지 무시
+warnings.filterwarnings('ignore')
+
+# 필요한 모듈 임포트
+from data_load import *
+from model import DDI_model
+from DeSIDE_DDI_functions import *
+
+def initialize_model_and_data():
+    """모델과 데이터를 초기화하고 로드하는 함수"""
+    try:
+        # 모델 생성 및 로드
+        with tf.compat.v1.Graph().as_default() as graph:
+            ddi_model = DDI_model()
+            ddi_model.load_model(
+                model_load_path='../trained_model/',
+                model_name='ddi_model_weights.h5',
+                threshold_name='ddi_model_threshold.csv'
+            )
+        print("Model loaded successfully.")
+
+        # 데이터 로드
+        ts_exp = load_exp()
+        drug_info = pd.read_csv('../data/twosides_drug_info.csv', index_col=0)
+        drug_info_dict = dict(zip(drug_info.pubchemID, drug_info.name))
+        side_effect_info = pd.read_csv('../data/twosides_side_effect_info.csv', index_col=0)
+        side_effect_dict = dict(zip(side_effect_info.SE_map, side_effect_info['Side Effect Name']))
+        se_UMLS_id = dict(zip(side_effect_info.SE_id, side_effect_info.SE_map))
+        print("Data loaded successfully.")
+
+        return ddi_model, graph, ts_exp, drug_info_dict, side_effect_dict, se_UMLS_id
+
+    except Exception as e:
+        print(f"Error during initialization: {e}")
+        return None, None, None, None, None, None
+
+# 전역 변수로 초기화
+ddi_model, graph, ts_exp, drug_info_dict, side_effect_dict, se_UMLS_id = initialize_model_and_data()
+
+# __all__을 정의하여 import 가능한 변수들을 명시적으로 지정
+__all__ = ['ddi_model', 'graph', 'ts_exp', 'drug_info_dict', 'side_effect_dict', 'se_UMLS_id']
+
+
+######### main.py #########
+import pandas as pd
+import itertools
+import tensorflow as tf
+import os
+from tqdm import tqdm
+from setup import *
+
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+
+def predict_ddi(drug1_cid, drug2_cid, side_effect_UMLS_CUI):
+    with graph.as_default():
+        try:
+            side_effect_type = se_UMLS_id[side_effect_UMLS_CUI]
+            test_df = pd.DataFrame({
+                'drug1': [drug1_cid],
+                'drug2': [drug2_cid],
+                'SE': [side_effect_type]
+            })
+
+            ts_drug_list = ts_exp.pubchem.values.tolist()
+            if drug1_cid not in ts_drug_list or drug2_cid not in ts_drug_list:
+                return None
+
+            return ddi_model.predict(test_df, exp_df=ts_exp)
+        except Exception as e:
+            print(f"Error in predict_ddi: {e}")
+            return None
+
+def find_high_score_side_effects(drug1_cid, drug2_cid):
+    high_score_results = []
+    
+    for side_effect_UMLS_CUI in tqdm(side_effects, 
+                                    desc=f"Processing {drug1_cid}-{drug2_cid}",
+                                    leave=False):
+        try:
+            result = predict_ddi(drug1_cid, drug2_cid, side_effect_UMLS_CUI)
+            if result is not None:
+                score = result.predicted_score.iloc[0]
+                
+                # score가 10 이상인 경우에만 결과 저장
+                if score >= 10:
+                    high_score_results.append({
+                        "drug1": drug1_cid,
+                        "drug2": drug2_cid,
+                        "score": score,
+                        "side_effect": side_effect_data.loc[side_effect_data['SE_id'] == side_effect_UMLS_CUI, 'Side Effect Name'].values[0],
+                        "UMLS_CUI": side_effect_UMLS_CUI
+                    })
+                    
+                    # 상위 5개 결과를 넘어가면 바로 반환
+                    if len(high_score_results) >= 5:
+                        return high_score_results
+                        
+        except Exception as e:
+            continue
+    
+    return high_score_results if high_score_results else None
+
+def write_results(results, output_path, text_output_path):
+    if not results:
+        return
+        
+    # CSV 파일에 한 번에 저장
+    pd.DataFrame(results).to_csv(output_path, mode='a', header=not os.path.exists(output_path), index=False)
+    
+    # 텍스트 파일에 저장
+    with open(text_output_path, 'a') as text_file:
+        current_drug_pair = None
+        for result in sorted(results, key=lambda x: (x['drug1'], x['drug2'], -x['score'])):
+            drug_pair = (result['drug1'], result['drug2'])
+            
+            if drug_pair != current_drug_pair:
+                current_drug_pair = drug_pair
+                text_file.write(f"\nDrug Pair: {drug_pair[0]} - {drug_pair[1]}\n")
+                text_file.write("-" * 50 + "\n")
+            
+            text_file.write(f"Score: {result['score']:.4f}\n")
+            text_file.write(f"Side Effect: {result['side_effect']}\n")
+            text_file.write(f"UMLS CUI: {result['UMLS_CUI']}\n")
+            text_file.write("-" * 30 + "\n")
+
+def main():
+    save_dir = '/home/wellysis/Decide/'
+    os.makedirs(save_dir, exist_ok=True)
+    
+    output_path = os.path.join(save_dir, 'High_score_drug_combinations.csv')
+    text_output_path = os.path.join(save_dir, 'High_score_drug_combinations.txt')
+    
+    # 초기 파일 생성
+    with open(text_output_path, 'w') as f:
+        f.write("=== Drug Combinations Results (Score ≥ 10) ===\n\n")
+    
+    global side_effect_data, side_effects
+    side_effect_data = pd.read_csv('../data/twosides_side_effect_info.csv')
+    side_effects = side_effect_data['SE_id'].tolist()
+    
+    # twosides_drug_info.csv에서 약물 정보 로드
+    drug_info = pd.read_csv('../data/twosides_drug_info.csv')
+    
+    # 약물 리스트 생성
+    drug_list = drug_info['pubchemID'].unique().tolist()
+    print(f"Total number of drugs: {len(drug_list)}")
+    
+    # 약물 조합 생성
+    drug_pairs = list(itertools.combinations(drug_list, 2))
+    print(f"Total number of drug pairs: {len(drug_pairs)}")
+    
+    all_results = []
+    batch_size = 5  # 배치 크기 설정
+    
+    progress_bar = tqdm(drug_pairs, desc="Processing drug pairs", unit="pair")
+    for drug1_cid, drug2_cid in progress_bar:
+        results = find_high_score_side_effects(drug1_cid, drug2_cid)
+        if results:
+            all_results.extend(results)
+            
+            # 배치 크기에 도달하면 결과 저장
+            if len(all_results) >= batch_size:
+                write_results(all_results, output_path, text_output_path)
+                all_results = []
+    
+    # 남은 결과 저장
+    if all_results:
+        write_results(all_results, output_path, text_output_path)
+    
+    print(f"\n\nResults saved to:")
+    print(f"1. {output_path}")
+    print(f"2. {text_output_path}")
+
+if __name__ == "__main__":
+    main()
